@@ -1,0 +1,42 @@
+pipeline {
+    agent {
+        kubernetes {
+            containerTemplate {
+                name 'helm'
+                image 'hirez.azurecr.io/helm:3.1.2'
+                command 'sleep'
+                args 'infinity'
+            }
+            defaultContainer 'helm'
+        }
+    }
+    environment {
+        HELM_EXPERIMENTAL_OCI = "1"
+    }
+    stages {
+        stage("Ensure Version Does Not Exist") {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'aks_jenkins', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                    sh(script: "echo ${PASSWORD} | helm registry login hirez.azurecr.io --username ${USERNAME} --password-stdin")
+                }
+
+                script {
+                    def chartConfig = readYaml(file: "open-match/Chart.yaml")
+                    chart = "hirez.azurecr.io/helm/${chartConfig.name}:${chartConfig.version}"
+
+                    sh("! helm chart pull ${chart} || (echo 'Chart ${chart} already exists' ; false)")
+                }
+            }
+        }
+        stage('Publish Chart') {
+            steps {
+                dir("open-match") {
+                    sh("helm repo update")
+                    sh("helm dep update .")
+                    sh("helm chart save . ${chart}")
+                    sh("helm chart push ${chart}")
+                }
+            }
+        }
+    }
+}
