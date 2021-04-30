@@ -31,7 +31,6 @@ pipeline {
         stage('Publish Chart') {
             steps {
                 dir("install/helm/open-match") {
-                    sh("helm repo update")
                     sh("helm dep update .")
                     sh("helm chart save . ${chart}")
                     sh("helm chart push ${chart}")
