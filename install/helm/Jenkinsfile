@@ -21,7 +21,7 @@ pipeline {
                 }
 
                 script {
-                    def chartConfig = readYaml(file: "open-match/Chart.yaml")
+                    def chartConfig = readYaml(file: "helm/install/open-match/Chart.yaml")
                     chart = "hirez.azurecr.io/helm/${chartConfig.name}:${chartConfig.version}"
 
                     sh("! helm chart pull ${chart} || (echo 'Chart ${chart} already exists' ; false)")
@@ -30,7 +30,7 @@ pipeline {
         }
         stage('Publish Chart') {
             steps {
-                dir("open-match") {
+                dir("helm/install/open-match") {
                     sh("helm repo update")
                     sh("helm dep update .")
                     sh("helm chart save . ${chart}")
