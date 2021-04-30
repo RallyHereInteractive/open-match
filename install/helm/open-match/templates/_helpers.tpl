@@ -60,6 +60,13 @@ prometheus.io/path: {{ .prometheus.endpoint }}
 {{- end -}}
 {{- end -}}
 
+{{/*
+Render global podAnnotations
+*/}}
+{{- define "openmatch.podAnnotations"}}
+{{- toYaml .Values.global.kubernetes.annotations }}
+{{- end -}}
+
 {{- define "openmatch.container.common" -}}
 imagePullPolicy: {{ .Values.global.image.pullPolicy }}
 resources:
