@@ -109,14 +109,14 @@ resources:
 {{- end -}}
 
 {{- define "openmatch.volumemounts.withredis" -}}
-{{- if .Values.redis.auth.enabled }}
+{{- if .Values.redis.usePassword }}
 - name: redis-password
   mountPath: {{ .Values.redis.secretMountPath }}
 {{- end -}}
 {{- end -}}
 
 {{- define "openmatch.volumes.withredis" -}}
-{{- if .Values.redis.auth.enabled }}
+{{- if .Values.redis.usePassword }}
 - name: redis-password
   secret:
     secretName: {{ include "call-nested" (list . "redis" "redis.fullname") }}
