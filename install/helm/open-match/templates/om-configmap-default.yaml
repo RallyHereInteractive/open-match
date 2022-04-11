@@ -90,7 +90,7 @@ data:
 {{- if index .Values "redis" "sentinel" "enabled"}}
       sentinelPort: {{ .Values.redis.sentinel.port }}
       sentinelMaster: {{ .Values.redis.sentinel.masterSet }}
-      sentinelHostname: {{ include "call-nested" (list . "redis" "redis.fullname") }}
+      sentinelHostname: {{ include "call-nested" (list . "redis" "common.names.fullname") }}
       sentinelUsePassword: {{ .Values.redis.auth.sentinel }}
 {{- else}}
       # Open Match's default Redis setups
