@@ -60,6 +60,13 @@ prometheus.io/path: {{ .prometheus.endpoint }}
 {{- end -}}
 {{- end -}}
 
+{{/*
+Render global podAnnotations
+*/}}
+{{- define "openmatch.podAnnotations"}}
+{{- toYaml .Values.global.kubernetes.annotations }}
+{{- end -}}
+
 {{- define "openmatch.container.common" -}}
 imagePullPolicy: {{ .Values.global.image.pullPolicy }}
 resources:
@@ -109,7 +116,7 @@ resources:
 {{- end -}}
 
 {{- define "openmatch.volumes.withredis" -}}
-{{- if .Values.redis.auth.enabled	 }}
+{{- if .Values.redis.auth.enabled }}
 - name: redis-password
   secret:
     secretName: {{ include "call-nested" (list . "redis" "redis.fullname") }}

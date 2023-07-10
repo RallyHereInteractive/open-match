@@ -276,6 +276,7 @@ global:
     # Use this field if you need to override the port type for all services defined in this chart
     service:
       portType:
+    annotations: {}
 
   gcpProjectId: "replace_with_your_project_id"
 
@@ -288,13 +289,14 @@ global:
       mountPath: /app/secrets/tls/rootca
 
   logging:
+    level: debug
     rpc:
       enabled: false
 
   # Use this field if you need to override the image registry and image tag for all services defined in this chart
   image:
     registry: gcr.io/open-match-public-images
-    tag: 0.0.0-dev
+    tag: 1.1.0
     pullPolicy: Always
 
   # Expose the telemetry configurations to all subcharts because prometheus, for example,
