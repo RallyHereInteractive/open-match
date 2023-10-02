@@ -229,6 +229,23 @@ func TestUpdateAssignments(t *testing.T) {
 			},
 		},
 		{
+			description: "empty ticketIds, error expected",
+			request: &pb.AssignTicketsRequest{
+				Assignments: []*pb.AssignmentGroup{
+					{
+						TicketIds:  []string{},
+						Assignment: &pb.Assignment{Connection: "2"},
+					},
+				},
+			},
+			expected: expected{
+				resp:               nil,
+				errCode:            codes.InvalidArgument,
+				errMessage:         "AssignmentGroupTicketIds is empty",
+				assignedTicketsIDs: nil,
+			},
+		},
+		{
 			description: "nil assignment, error expected",
 			request: &pb.AssignTicketsRequest{
 				Assignments: []*pb.AssignmentGroup{
@@ -957,7 +974,7 @@ func createRedis(t *testing.T, withSentinel bool, withPassword string) (config.V
 	}
 }
 
-//nolint: unparam
+// nolint: unparam
 // generateTickets creates a proper amount of ticket, returns a slice of tickets and a slice of tickets ids
 func generateTickets(ctx context.Context, t *testing.T, service Service, amount int) ([]*pb.Ticket, []string) {
 	tickets := make([]*pb.Ticket, 0, amount)

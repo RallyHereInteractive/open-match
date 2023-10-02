@@ -17,15 +17,15 @@ package frontend
 import (
 	"context"
 
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes"
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/rs/xid"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"open-match.dev/open-match/internal/config"
 	"open-match.dev/open-match/internal/statestore"
 	"open-match.dev/open-match/pkg/pb"
@@ -72,7 +72,7 @@ func doCreateTicket(ctx context.Context, req *pb.CreateTicketRequest, store stat
 	}
 
 	ticket.Id = xid.New().String()
-	ticket.CreateTime = ptypes.TimestampNow()
+	ticket.CreateTime = timestamppb.Now()
 
 	sfCount := 0
 	sfCount += len(ticket.GetSearchFields().GetDoubleArgs())
@@ -122,7 +122,7 @@ func doCreateBackfill(ctx context.Context, req *pb.CreateBackfillRequest, store 
 	}
 
 	backfill.Id = xid.New().String()
-	backfill.CreateTime = ptypes.TimestampNow()
+	backfill.CreateTime = timestamppb.Now()
 	backfill.Generation = 1
 
 	sfCount := 0
@@ -171,7 +171,7 @@ func (s *frontendService) UpdateBackfill(ctx context.Context, req *pb.UpdateBack
 		return nil, err
 	}
 	defer func() {
-		if _, err = m.Unlock(ctx); err != nil {
+		if _, err = m.Unlock(context.Background()); err != nil {
 			logger.WithError(err).Error("error on mutex unlock")
 		}
 	}()
@@ -183,6 +183,7 @@ func (s *frontendService) UpdateBackfill(ctx context.Context, req *pb.UpdateBack
 	// Update generation here, because Frontend is used by GameServer only
 	bfStored.SearchFields = backfill.SearchFields
 	bfStored.Extensions = backfill.Extensions
+	bfStored.PersistentField = backfill.PersistentField
 	// Autoincrement generation, input backfill generation validation is performed
 	// on Backend only (after MMF round)
 	bfStored.Generation++
@@ -208,7 +209,7 @@ func (s *frontendService) UpdateBackfill(ctx context.Context, req *pb.UpdateBack
 }
 
 // DeleteBackfill deletes a Backfill by its ID.
-func (s *frontendService) DeleteBackfill(ctx context.Context, req *pb.DeleteBackfillRequest) (*empty.Empty, error) {
+func (s *frontendService) DeleteBackfill(ctx context.Context, req *pb.DeleteBackfillRequest) (*emptypb.Empty, error) {
 	bfID := req.GetBackfillId()
 	if bfID == "" {
 		return nil, status.Errorf(codes.InvalidArgument, ".BackfillId is required")
@@ -221,19 +222,20 @@ func (s *frontendService) DeleteBackfill(ctx context.Context, req *pb.DeleteBack
 			"error": err.Error(),
 		}).Error("error on DeleteBackfill")
 	}
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
 // DeleteTicket immediately stops Open Match from using the Ticket for matchmaking and removes the Ticket from state storage.
 // The client must delete the Ticket when finished matchmaking with it.
 //   - If SearchFields exist in a Ticket, DeleteTicket will deindex the fields lazily.
+//
 // Users may still be able to assign/get a ticket after calling DeleteTicket on it.
-func (s *frontendService) DeleteTicket(ctx context.Context, req *pb.DeleteTicketRequest) (*empty.Empty, error) {
+func (s *frontendService) DeleteTicket(ctx context.Context, req *pb.DeleteTicketRequest) (*emptypb.Empty, error) {
 	err := doDeleteTicket(ctx, req.GetTicketId(), s.store)
 	if err != nil {
 		return nil, err
 	}
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
 func doDeleteTicket(ctx context.Context, id string, store statestore.Service) error {
@@ -277,39 +279,37 @@ func (s *frontendService) GetTicket(ctx context.Context, req *pb.GetTicketReques
 //   - If the Assignment is not updated, GetAssignment will retry using the configured backoff strategy.
 func (s *frontendService) WatchAssignments(req *pb.WatchAssignmentsRequest, stream pb.FrontendService_WatchAssignmentsServer) error {
 	ctx := stream.Context()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			sender := func(assignment *pb.Assignment) error {
-				return stream.Send(&pb.WatchAssignmentsResponse{Assignment: assignment})
-			}
-			return doWatchAssignments(ctx, req.GetTicketId(), sender, s.store)
-		}
+	sender := func(assignment *pb.Assignment) error {
+		return stream.Send(&pb.WatchAssignmentsResponse{Assignment: assignment})
 	}
+	return doWatchAssignments(ctx, req.GetTicketId(), sender, s.store)
 }
 
 func doWatchAssignments(ctx context.Context, id string, sender func(*pb.Assignment) error, store statestore.Service) error {
 	var currAssignment *pb.Assignment
 	var ok bool
 	callback := func(assignment *pb.Assignment) error {
-		if ctx.Err() != nil {
+		select {
+		case <-ctx.Done():
 			return status.Errorf(codes.Aborted, ctx.Err().Error())
-		}
-
-		if (currAssignment == nil && assignment != nil) || !proto.Equal(currAssignment, assignment) {
-			currAssignment, ok = proto.Clone(assignment).(*pb.Assignment)
-			if !ok {
-				return status.Error(codes.Internal, "failed to cast the assignment object")
+		default:
+			if ctx.Err() != nil {
+				return status.Errorf(codes.Aborted, ctx.Err().Error())
 			}
 
-			err := sender(currAssignment)
-			if err != nil {
-				return status.Errorf(codes.Aborted, err.Error())
+			if (currAssignment == nil && assignment != nil) || !proto.Equal(currAssignment, assignment) {
+				currAssignment, ok = proto.Clone(assignment).(*pb.Assignment)
+				if !ok {
+					return status.Error(codes.Internal, "failed to cast the assignment object")
+				}
+
+				err := sender(currAssignment)
+				if err != nil {
+					return status.Errorf(codes.Aborted, err.Error())
+				}
 			}
+			return nil
 		}
-		return nil
 	}
 
 	return store.GetAssignments(ctx, id, callback)
@@ -317,7 +317,7 @@ func doWatchAssignments(ctx context.Context, id string, sender func(*pb.Assignme
 
 // AcknowledgeBackfill is used to notify OpenMatch about GameServer connection info.
 // This triggers an assignment process.
-func (s *frontendService) AcknowledgeBackfill(ctx context.Context, req *pb.AcknowledgeBackfillRequest) (*pb.Backfill, error) {
+func (s *frontendService) AcknowledgeBackfill(ctx context.Context, req *pb.AcknowledgeBackfillRequest) (*pb.AcknowledgeBackfillResponse, error) {
 	if req.GetBackfillId() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, ".BackfillId is required")
 	}
@@ -332,7 +332,7 @@ func (s *frontendService) AcknowledgeBackfill(ctx context.Context, req *pb.Ackno
 		return nil, err
 	}
 	defer func() {
-		if _, err = m.Unlock(ctx); err != nil {
+		if _, err = m.Unlock(context.Background()); err != nil {
 			logger.WithError(err).Error("error on mutex unlock")
 		}
 	}()
@@ -347,16 +347,23 @@ func (s *frontendService) AcknowledgeBackfill(ctx context.Context, req *pb.Ackno
 		return nil, err
 	}
 
+	resp := &pb.AcknowledgeBackfillResponse{
+		Backfill: bf,
+		Tickets:  make([]*pb.Ticket, 0),
+	}
+
 	if len(associatedTickets) != 0 {
-		resp, _, err := s.store.UpdateAssignments(ctx, &pb.AssignTicketsRequest{
+		setResp, tickets, err := s.store.UpdateAssignments(ctx, &pb.AssignTicketsRequest{
 			Assignments: []*pb.AssignmentGroup{{TicketIds: associatedTickets, Assignment: req.GetAssignment()}},
 		})
 		if err != nil {
 			return nil, err
 		}
 
+		resp.Tickets = tickets
+
 		// log errors returned from UpdateAssignments to track tickets with NotFound errors
-		for _, f := range resp.Failures {
+		for _, f := range setResp.Failures {
 			logger.Errorf("failed to assign ticket %s, cause %d", f.TicketId, f.Cause)
 		}
 		for _, id := range associatedTickets {
@@ -374,7 +381,7 @@ func (s *frontendService) AcknowledgeBackfill(ctx context.Context, req *pb.Ackno
 		}
 	}
 
-	return bf, nil
+	return resp, nil
 }
 
 // GetBackfill fetches a Backfill object by its ID.

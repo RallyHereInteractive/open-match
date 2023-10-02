@@ -53,7 +53,7 @@
 # If you want information on how to edit this file checkout,
 # http://makefiletutorial.com/
 
-BASE_VERSION = 0.0.0-dev
+BASE_VERSION = 1.8.0
 SHORT_SHA = $(shell git rev-parse --short=7 HEAD | tr -d [:punct:])
 BRANCH_NAME = $(shell git rev-parse --abbrev-ref HEAD | tr -d [:punct:])
 VERSION = $(BASE_VERSION)-$(SHORT_SHA)
@@ -61,16 +61,15 @@ BUILD_DATE = $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 YEAR_MONTH = $(shell date -u +'%Y%m')
 YEAR_MONTH_DAY = $(shell date -u +'%Y%m%d')
 MAJOR_MINOR_VERSION = $(shell echo $(BASE_VERSION) | cut -d '.' -f1).$(shell echo $(BASE_VERSION) | cut -d '.' -f2)
-PROTOC_VERSION = 3.10.1
-# 3.8.0 was specified by the PR in open match. Hopefully this won't cause any problems - https://github.com/googleforgames/open-match/pull/1440/files
-HELM_VERSION = 3.5.0
-KUBECTL_VERSION = 1.16.2
+PROTOC_VERSION = 24.0
+HELM_VERSION = 3.12.3
+KUBECTL_VERSION = 1.27.3
 MINIKUBE_VERSION = latest
 GOLANGCI_VERSION = 1.18.0
 KIND_VERSION = 0.5.1
 SWAGGERUI_VERSION = 3.24.2
 GOOGLE_APIS_VERSION = aba342359b6743353195ca53f944fe71e6fb6cd4
-GRPC_GATEWAY_VERSION = 2.3.0
+GRPC_GATEWAY_VERSION = 2.16.2
 TERRAFORM_VERSION = 0.12.13
 CHART_TESTING_VERSION = 2.4.0
 
@@ -78,7 +77,7 @@ CHART_TESTING_VERSION = 2.4.0
 REDIS_DEV_PASSWORD = helloworld
 
 ENABLE_SECURITY_HARDENING = 0
-GO = GO111MODULE=on go
+GO = go
 # Defines the absolute local directory of the open-match project
 REPOSITORY_ROOT := $(patsubst %/,%,$(dir $(abspath $(MAKEFILE_LIST))))
 BUILD_DIR = $(REPOSITORY_ROOT)/build
@@ -101,11 +100,10 @@ GCP_ZONE = us-west1-a
 GCP_LOCATION = $(GCP_ZONE)
 EXE_EXTENSION =
 GCP_LOCATION_FLAG = --zone $(GCP_ZONE)
-GO111MODULE = on
 GOLANG_TEST_COUNT = 1
+GOLANG_EXTRA_TEST_FLAGS = 
 SWAGGERUI_PORT = 51500
 PROMETHEUS_PORT = 9090
-JAEGER_QUERY_PORT = 16686
 GRAFANA_PORT = 3000
 FRONTEND_PORT = 51504
 BACKEND_PORT = 51505
@@ -122,6 +120,7 @@ CERTGEN = $(TOOLCHAIN_BIN)/certgen$(EXE_EXTENSION)
 GOLANGCI = $(TOOLCHAIN_BIN)/golangci-lint$(EXE_EXTENSION)
 CHART_TESTING = $(TOOLCHAIN_BIN)/ct$(EXE_EXTENSION)
 GCLOUD = gcloud --quiet
+USE_GKE_GCLOUD_AUTH_PLUGIN = True
 OPEN_MATCH_HELM_NAME = open-match
 OPEN_MATCH_KUBERNETES_NAMESPACE = open-match
 OPEN_MATCH_SECRETS_DIR = $(REPOSITORY_ROOT)/install/helm/open-match/secrets
@@ -190,8 +189,10 @@ else
 endif
 
 GOLANG_PROTOS = pkg/pb/backend.pb.go pkg/pb/frontend.pb.go pkg/pb/matchfunction.pb.go pkg/pb/query.pb.go pkg/pb/messages.pb.go pkg/pb/extensions.pb.go pkg/pb/evaluator.pb.go internal/ipb/synchronizer.pb.go internal/ipb/messages.pb.go pkg/pb/backend.pb.gw.go pkg/pb/frontend.pb.gw.go pkg/pb/matchfunction.pb.gw.go pkg/pb/query.pb.gw.go pkg/pb/evaluator.pb.gw.go
+golang-protos: $(GOLANG_PROTOS)
 
 SWAGGER_JSON_DOCS = api/frontend.swagger.json api/backend.swagger.json api/query.swagger.json api/matchfunction.swagger.json api/evaluator.swagger.json
+swagger-json-docs: $(SWAGGER_JSON_DOCS)
 
 ALL_PROTOS = $(GOLANG_PROTOS) $(SWAGGER_JSON_DOCS)
 
@@ -318,7 +319,6 @@ build/chart/: build/chart/index.yaml build/chart/index.yaml.$(YEAR_MONTH_DAY)
 
 install-chart-prerequisite: build/toolchain/bin/kubectl$(EXE_EXTENSION) update-chart-deps
 	-$(KUBECTL) create namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE)
-	$(KUBECTL) apply -f install/gke-metadata-server-workaround.yaml
 
 # Used for Open Match development. Install om-configmap-override.yaml by default.
 HELM_UPGRADE_FLAGS = --cleanup-on-fail -i --no-hooks --debug --timeout=600s --namespace=$(OPEN_MATCH_KUBERNETES_NAMESPACE) --set global.gcpProjectId=$(GCP_PROJECT_ID) --set open-match-override.enabled=true --set redis.password=$(REDIS_DEV_PASSWORD) --set redis.auth.enabled=false --set redis.auth.sentinel=false
@@ -340,7 +340,6 @@ install-large-chart: install-chart-prerequisite install-demo build/toolchain/bin
 		--set open-match-customize.enabled=true \
 		--set open-match-customize.evaluator.enabled=true \
 		--set global.telemetry.grafana.enabled=true \
-		--set global.telemetry.jaeger.enabled=true \
 		--set global.telemetry.prometheus.enabled=true
 
 # install-chart will install open-match-core, open-match-demo, with the demo evaluator and mmf.
@@ -358,7 +357,6 @@ install-scale-chart: install-chart-prerequisite build/toolchain/bin/helm$(EXE_EX
 		--set open-match-customize.evaluator.enabled=true \
 		--set open-match-customize.function.image=openmatch-scale-mmf \
 		--set global.telemetry.grafana.enabled=true \
-		--set global.telemetry.jaeger.enabled=false \
 		--set global.telemetry.prometheus.enabled=true
 	$(HELM) template $(OPEN_MATCH_HELM_NAME)-scale  install/helm/open-match $(HELM_TEMPLATE_FLAGS) $(HELM_IMAGE_FLAGS) -f install/helm/open-match/values-production.yaml \
 		--set open-match-core.enabled=false \
@@ -389,8 +387,8 @@ install-ci-chart: install-chart-prerequisite build/toolchain/bin/helm$(EXE_EXTEN
 delete-chart: build/toolchain/bin/helm$(EXE_EXTENSION) build/toolchain/bin/kubectl$(EXE_EXTENSION)
 	-$(HELM) uninstall $(OPEN_MATCH_HELM_NAME)
 	-$(HELM) uninstall $(OPEN_MATCH_HELM_NAME)-demo
-	-$(KUBECTL) delete psp,clusterrole,clusterrolebinding --selector=release=open-match
-	-$(KUBECTL) delete psp,clusterrole,clusterrolebinding --selector=release=open-match-demo
+	-$(KUBECTL) delete clusterrole,clusterrolebinding --selector=release=open-match
+	-$(KUBECTL) delete clusterrole,clusterrolebinding --selector=release=open-match-demo
 	-$(KUBECTL) delete namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE)
 	-$(KUBECTL) delete namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE)-demo
 
@@ -398,14 +396,11 @@ ifneq ($(BASE_VERSION), 0.0.0-dev)
 install/yaml/: REGISTRY = gcr.io/$(OPEN_MATCH_PUBLIC_IMAGES_PROJECT_ID)
 install/yaml/: TAG = $(BASE_VERSION)
 endif
-install/yaml/: update-chart-deps install/yaml/install.yaml install/yaml/01-open-match-core.yaml install/yaml/02-open-match-demo.yaml install/yaml/03-prometheus-chart.yaml install/yaml/04-grafana-chart.yaml install/yaml/05-jaeger-chart.yaml install/yaml/06-open-match-override-configmap.yaml install/yaml/07-open-match-default-evaluator.yaml
+install/yaml/: update-chart-deps install/yaml/install.yaml install/yaml/01-open-match-core.yaml install/yaml/02-open-match-demo.yaml install/yaml/03-prometheus-chart.yaml install/yaml/04-grafana-chart.yaml  install/yaml/06-open-match-override-configmap.yaml install/yaml/07-open-match-default-evaluator.yaml
 
-# We have to hard-code the Jaeger endpoints as we are excluding Jaeger, so Helm cannot determine the endpoints from the Jaeger subchart
 install/yaml/01-open-match-core.yaml: build/toolchain/bin/helm$(EXE_EXTENSION)
 	mkdir -p install/yaml/
 	$(HELM) template $(OPEN_MATCH_HELM_NAME) $(HELM_TEMPLATE_FLAGS) $(HELM_IMAGE_FLAGS) \
-		--set-string global.telemetry.jaeger.agentEndpoint="$(OPEN_MATCH_HELM_NAME)-jaeger-agent:6831" \
-		--set-string global.telemetry.jaeger.collectorEndpoint="http://$(OPEN_MATCH_HELM_NAME)-jaeger-collector:14268/api/traces" \
 		install/helm/open-match > install/yaml/01-open-match-core.yaml
 
 install/yaml/02-open-match-demo.yaml: build/toolchain/bin/helm$(EXE_EXTENSION)
@@ -434,15 +429,6 @@ install/yaml/04-grafana-chart.yaml: build/toolchain/bin/helm$(EXE_EXTENSION)
 		--set-string global.telemetry.grafana.prometheusServer="http://$(OPEN_MATCH_HELM_NAME)-prometheus-server.$(OPEN_MATCH_KUBERNETES_NAMESPACE).svc.cluster.local:80/" \
 		install/helm/open-match > install/yaml/04-grafana-chart.yaml
 
-install/yaml/05-jaeger-chart.yaml: build/toolchain/bin/helm$(EXE_EXTENSION)
-	mkdir -p install/yaml/
-	$(HELM) template $(OPEN_MATCH_HELM_NAME) $(HELM_TEMPLATE_FLAGS) $(HELM_IMAGE_FLAGS) \
-		--set open-match-core.enabled=false \
-		--set open-match-core.redis.enabled=false \
-		--set open-match-telemetry.enabled=true \
-		--set global.telemetry.jaeger.enabled=true \
-		install/helm/open-match > install/yaml/05-jaeger-chart.yaml
-
 install/yaml/06-open-match-override-configmap.yaml: build/toolchain/bin/helm$(EXE_EXTENSION)
 	mkdir -p install/yaml/
 	$(HELM) template $(OPEN_MATCH_HELM_NAME) $(HELM_TEMPLATE_FLAGS) $(HELM_IMAGE_FLAGS) \
@@ -467,7 +453,6 @@ install/yaml/install.yaml: build/toolchain/bin/helm$(EXE_EXTENSION)
 		--set open-match-customize.enabled=true \
 		--set open-match-customize.evaluator.enabled=true \
 		--set open-match-telemetry.enabled=true \
-		--set global.telemetry.jaeger.enabled=true \
 		--set global.telemetry.grafana.enabled=true \
 		--set global.telemetry.prometheus.enabled=true \
 		install/helm/open-match > install/yaml/install.yaml
@@ -496,7 +481,7 @@ install-kubernetes-tools: build/toolchain/bin/kubectl$(EXE_EXTENSION) build/tool
 ## # Install protoc tools
 ## make install-protoc-tools
 ##
-install-protoc-tools: build/toolchain/bin/protoc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-go$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-grpc-gateway$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-openapiv2$(EXE_EXTENSION)
+install-protoc-tools: build/toolchain/bin/protoc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-go$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-go-grpc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-grpc-gateway$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-openapiv2$(EXE_EXTENSION)
 
 ## # Install OpenMatch tools
 ## make install-openmatch-tools
@@ -565,18 +550,22 @@ build/toolchain/bin/protoc$(EXE_EXTENSION):
 
 build/toolchain/bin/protoc-gen-doc$(EXE_EXTENSION):
 	mkdir -p $(TOOLCHAIN_BIN)
-	cd $(TOOLCHAIN_BIN) && $(GO) build -i -pkgdir . github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc
+	cd $(TOOLCHAIN_BIN) && $(GO) get github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc && $(GO) build -pkgdir . github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc
 
 build/toolchain/bin/protoc-gen-go$(EXE_EXTENSION):
 	mkdir -p $(TOOLCHAIN_BIN)
-	cd $(TOOLCHAIN_BIN) && $(GO) build -i -pkgdir . github.com/golang/protobuf/protoc-gen-go
+	cd $(TOOLCHAIN_BIN) && $(GO) get google.golang.org/protobuf/cmd/protoc-gen-go && $(GO) build -pkgdir . google.golang.org/protobuf/cmd/protoc-gen-go
+
+build/toolchain/bin/protoc-gen-go-grpc$(EXE_EXTENSION):
+	mkdir -p $(TOOLCHAIN_BIN)
+	cd $(TOOLCHAIN_BIN) && $(GO) get google.golang.org/grpc/cmd/protoc-gen-go-grpc && $(GO) build -pkgdir . google.golang.org/grpc/cmd/protoc-gen-go-grpc
 
 build/toolchain/bin/protoc-gen-grpc-gateway$(EXE_EXTENSION):
-	cd $(TOOLCHAIN_BIN) && $(GO) build -i -pkgdir . github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway
+	cd $(TOOLCHAIN_BIN) && $(GO) get github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway && $(GO) build -pkgdir . github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway
 
 build/toolchain/bin/protoc-gen-openapiv2$(EXE_EXTENSION):
 	mkdir -p $(TOOLCHAIN_BIN)
-	cd $(TOOLCHAIN_BIN) && $(GO) build -i -pkgdir . github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2
+	cd $(TOOLCHAIN_BIN) && $(GO) get github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2 && $(GO) build -pkgdir . github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2
 
 build/toolchain/bin/certgen$(EXE_EXTENSION):
 	mkdir -p $(TOOLCHAIN_BIN)
@@ -637,26 +626,23 @@ delete-kind-cluster: build/toolchain/bin/kind$(EXE_EXTENSION) build/toolchain/bi
 create-cluster-role-binding:
 	$(KUBECTL) create clusterrolebinding myname-cluster-admin-binding --clusterrole=cluster-admin --user=$(GCLOUD_ACCOUNT_EMAIL)
 
-create-gke-cluster: GKE_VERSION = 1.15.12-gke.6002 # gcloud beta container get-server-config --zone us-west1-a
 create-gke-cluster: GKE_CLUSTER_SHAPE_FLAGS = --machine-type n1-standard-8 --enable-autoscaling --min-nodes 1 --num-nodes 6 --max-nodes 10 --disk-size 50
 create-gke-cluster: GKE_FUTURE_COMPAT_FLAGS = --no-enable-basic-auth --no-issue-client-certificate --enable-ip-alias --metadata disable-legacy-endpoints=true --enable-autoupgrade
 create-gke-cluster: build/toolchain/bin/kubectl$(EXE_EXTENSION) gcloud
-	$(GCLOUD) beta $(GCP_PROJECT_FLAG) container clusters create $(GKE_CLUSTER_NAME) $(GCP_LOCATION_FLAG) $(GKE_CLUSTER_SHAPE_FLAGS) $(GKE_FUTURE_COMPAT_FLAGS) $(GKE_CLUSTER_FLAGS) \
-		--enable-pod-security-policy \
-		--cluster-version $(GKE_VERSION) \
+	$(GCLOUD) $(GCP_PROJECT_FLAG) container clusters create $(GKE_CLUSTER_NAME) $(GCP_LOCATION_FLAG) $(GKE_CLUSTER_SHAPE_FLAGS) $(GKE_FUTURE_COMPAT_FLAGS) $(GKE_CLUSTER_FLAGS) \
+		--cluster-version 1.27.3-gke.1700 \
 		--image-type cos_containerd \
-		--tags open-match
-	$(MAKE) create-cluster-role-binding
-	
+		--tags open-match \
+		--workload-pool $(GCP_PROJECT_ID).svc.id.goog
 
 delete-gke-cluster: gcloud
 	-$(GCLOUD) $(GCP_PROJECT_FLAG) container clusters delete $(GKE_CLUSTER_NAME) $(GCP_LOCATION_FLAG) $(GCLOUD_EXTRA_FLAGS)
 
 create-mini-cluster: build/toolchain/bin/minikube$(EXE_EXTENSION)
-	$(MINIKUBE) start --memory 6144 --cpus 4 --disk-size 50g
+	$(MINIKUBE) start -p openmatch --memory 6144 --cpus 4 --disk-size 50g --kubernetes-version=v1.27.3
 
 delete-mini-cluster: build/toolchain/bin/minikube$(EXE_EXTENSION)
-	-$(MINIKUBE) delete
+	-$(MINIKUBE) delete -p openmatch
 
 gcp-apply-binauthz-policy: build/policies/binauthz.yaml
 	$(GCLOUD) beta $(GCP_PROJECT_FLAG) container binauthz policy import build/policies/binauthz.yaml
@@ -674,26 +660,28 @@ all-protos: $(ALL_PROTOS)
 # support methods for directing it to the correct location that's not the proto
 # file's location. 
 # So, instead, put it in a tempororary directory, then move it out.
-pkg/pb/%.pb.go: api/%.proto third_party/ build/toolchain/bin/protoc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-go$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-grpc-gateway$(EXE_EXTENSION)
+pkg/pb/%.pb.go: api/%.proto third_party/ build/toolchain/bin/protoc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-go$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-go-grpc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-grpc-gateway$(EXE_EXTENSION)
 	mkdir -p $(REPOSITORY_ROOT)/build/prototmp $(REPOSITORY_ROOT)/pkg/pb
-	$(PROTOC) $< \
+	$(PROTOC)  $< \
 		-I $(REPOSITORY_ROOT) -I $(PROTOC_INCLUDES) \
-		--go_out=plugins=grpc:$(REPOSITORY_ROOT)/build/prototmp
-	mv $(REPOSITORY_ROOT)/build/prototmp/open-match.dev/open-match/$@ $@
+		--go_out=$(REPOSITORY_ROOT)/build/prototmp \
+		--go-grpc_out=require_unimplemented_servers=false:$(REPOSITORY_ROOT)/build/prototmp 
+	mv $(REPOSITORY_ROOT)/build/prototmp/open-match.dev/open-match/pkg/pb/* $(REPOSITORY_ROOT)/pkg/pb/
 
-internal/ipb/%.pb.go: internal/api/%.proto third_party/ build/toolchain/bin/protoc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-go$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-grpc-gateway$(EXE_EXTENSION)
+internal/ipb/%.pb.go: internal/api/%.proto third_party/ build/toolchain/bin/protoc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-go$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-go-grpc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-grpc-gateway$(EXE_EXTENSION)
 	mkdir -p $(REPOSITORY_ROOT)/build/prototmp $(REPOSITORY_ROOT)/internal/ipb
-	$(PROTOC) $< \
+	$(PROTOC)  $< \
 		-I $(REPOSITORY_ROOT) -I $(PROTOC_INCLUDES) \
-		--go_out=plugins=grpc:$(REPOSITORY_ROOT)/build/prototmp
-	mv $(REPOSITORY_ROOT)/build/prototmp/open-match.dev/open-match/$@ $@
+		--go_out=$(REPOSITORY_ROOT)/build/prototmp \
+		--go-grpc_out=require_unimplemented_servers=false:$(REPOSITORY_ROOT)/build/prototmp 
+	mv $(REPOSITORY_ROOT)/build/prototmp/open-match.dev/open-match/internal/ipb/* $(REPOSITORY_ROOT)/internal/ipb/
 
-pkg/pb/%.pb.gw.go: api/%.proto third_party/ build/toolchain/bin/protoc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-go$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-grpc-gateway$(EXE_EXTENSION)
+pkg/pb/%.pb.gw.go: api/%.proto third_party/ build/toolchain/bin/protoc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-go$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-go-grpc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-grpc-gateway$(EXE_EXTENSION)
 	mkdir -p $(REPOSITORY_ROOT)/build/prototmp $(REPOSITORY_ROOT)/pkg/pb
 	$(PROTOC) $< \
 		-I $(REPOSITORY_ROOT) -I $(PROTOC_INCLUDES) \
    		--grpc-gateway_out=logtostderr=true,allow_delete_body=true:$(REPOSITORY_ROOT)/build/prototmp
-	mv $(REPOSITORY_ROOT)/build/prototmp/open-match.dev/open-match/$@ $@
+	mv $(REPOSITORY_ROOT)/build/prototmp/open-match.dev/open-match/pkg/pb/* $(REPOSITORY_ROOT)/pkg/pb/
 
 api/%.swagger.json: api/%.proto third_party/ build/toolchain/bin/protoc$(EXE_EXTENSION) build/toolchain/bin/protoc-gen-openapiv2$(EXE_EXTENSION)
 	$(PROTOC) $< \
@@ -737,8 +725,10 @@ build: assets
 define test_folder
 	$(if $(wildcard $(1)/go.mod), \
 		cd $(1) && \
-		$(GO) test -cover -test.count $(GOLANG_TEST_COUNT) -race ./... && \
-		$(GO) test -cover -test.count $(GOLANG_TEST_COUNT) -run IgnoreRace$$ ./... \
+		$(GO) mod tidy && \
+		$(GO) mod download -x && \
+		CGO_ENABLED=1 $(GO) test $(GOLANG_EXTRA_TEST_FLAGS) -p 1 -cover -test.count $(GOLANG_TEST_COUNT) -race -vet=off ./... && \
+		CGO_ENABLED=0 $(GO) test $(GOLANG_EXTRA_TEST_FLAGS) -p 1 -cover -test.count $(GOLANG_TEST_COUNT) -vet=off -run IgnoreRace$$ ./... \
     )
 	$(foreach dir, $(wildcard $(1)/*/.), $(call test_folder, $(dir)))
 endef
@@ -764,7 +754,7 @@ fasttest: $(ALL_PROTOS) tls-certs third_party/
 	$(call fast_test_folder,.)
 
 test-e2e-cluster: all-protos tls-certs third_party/
-	$(HELM) test --timeout 7m30s -v 0 --logs -n $(OPEN_MATCH_KUBERNETES_NAMESPACE) $(OPEN_MATCH_HELM_NAME)
+	$(HELM) test --timeout 15m --debug -v 0 --logs -n $(OPEN_MATCH_KUBERNETES_NAMESPACE) $(OPEN_MATCH_HELM_NAME)
 
 fmt:
 	$(GO) fmt ./...
@@ -774,7 +764,7 @@ vet:
 	$(GO) vet ./...
 
 golangci: build/toolchain/bin/golangci-lint$(EXE_EXTENSION)
-	GO111MODULE=on $(GOLANGCI) run --config=$(REPOSITORY_ROOT)/.golangci.yaml
+	$(GOLANGCI) run --config=$(REPOSITORY_ROOT)/.golangci.yaml
 
 ## # Run linter on Go code, charts and terraform
 ## make lint
@@ -793,7 +783,7 @@ $(foreach CMD,$(CMDS),build/cmd/$(CMD)): build/cmd/%: build/cmd/%/BUILD_PHONY bu
 
 build/cmd/%/BUILD_PHONY:
 	mkdir -p $(BUILD_DIR)/cmd/$*
-	CGO_ENABLED=0 $(GO) build -a -installsuffix cgo -o $(BUILD_DIR)/cmd/$*/run open-match.dev/open-match/cmd/$*
+	CGO_ENABLED=0 $(GO) build -v -installsuffix cgo -o $(BUILD_DIR)/cmd/$*/run open-match.dev/open-match/cmd/$*
 
 # Default is that nothing needs to be copied into the direcotry
 build/cmd/%/COPY_PHONY:
@@ -864,7 +854,7 @@ ci-reap-namespaces: build/toolchain/bin/reaper$(EXE_EXTENSION)
 	-$(TOOLCHAIN_BIN)/reaper -age=30m
 
 # For presubmit we want to update the protobuf generated files and verify that tests are good.
-presubmit: GOLANG_TEST_COUNT = 5
+presubmit: GOLANG_TEST_COUNT = 3
 presubmit: clean third_party/ update-chart-deps assets update-deps lint build test md-test terraform-test
 
 build/release/: presubmit clean-install-yaml install/yaml/
@@ -949,17 +939,13 @@ proxy-synchronizer: build/toolchain/bin/kubectl$(EXE_EXTENSION)
 	@echo "Synchronizer Trace: http://localhost:$(SYNCHRONIZER_PORT)/debug/tracez"
 	$(KUBECTL) port-forward --namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE) $(shell $(KUBECTL) get pod --namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE) --selector="app=open-match,component=synchronizer,release=$(OPEN_MATCH_HELM_NAME)" --output jsonpath='{.items[0].metadata.name}') $(SYNCHRONIZER_PORT):51506 $(PORT_FORWARD_ADDRESS_FLAG)
 
-proxy-jaeger: build/toolchain/bin/kubectl$(EXE_EXTENSION)
-	@echo "Jaeger Query Frontend: http://localhost:16686"
-	$(KUBECTL) port-forward --namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE) $(shell $(KUBECTL) get pod --namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE) --selector="app.kubernetes.io/name=jaeger,app.kubernetes.io/component=query" --output jsonpath='{.items[0].metadata.name}') $(JAEGER_QUERY_PORT):16686 $(PORT_FORWARD_ADDRESS_FLAG)
-
 proxy-grafana: build/toolchain/bin/kubectl$(EXE_EXTENSION)
 	@echo "User: admin"
 	@echo "Password: openmatch"
-	$(KUBECTL) port-forward --namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE) $(shell $(KUBECTL) get pod --namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE) --selector="app=grafana,release=$(OPEN_MATCH_HELM_NAME)" --output jsonpath='{.items[0].metadata.name}') $(GRAFANA_PORT):3000 $(PORT_FORWARD_ADDRESS_FLAG)
+	$(KUBECTL) port-forward --namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE) service/$(shell $(KUBECTL) get service --namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE) --selector="app.kubernetes.io/name=grafana" --output jsonpath='{.items[0].metadata.name}') $(GRAFANA_PORT):3000 $(PORT_FORWARD_ADDRESS_FLAG)
 
 proxy-prometheus: build/toolchain/bin/kubectl$(EXE_EXTENSION)
-	$(KUBECTL) port-forward --namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE) $(shell $(KUBECTL) get pod --namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE) --selector="app=prometheus,component=server,release=$(OPEN_MATCH_HELM_NAME)" --output jsonpath='{.items[0].metadata.name}') $(PROMETHEUS_PORT):9090 $(PORT_FORWARD_ADDRESS_FLAG)
+	$(KUBECTL) port-forward --namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE) service/$(shell $(KUBECTL) get service --namespace $(OPEN_MATCH_KUBERNETES_NAMESPACE) --selector="app=prometheus,component=server,release=$(OPEN_MATCH_HELM_NAME)" --output jsonpath='{.items[0].metadata.name}') $(PROMETHEUS_PORT):80 $(PORT_FORWARD_ADDRESS_FLAG)
 
 proxy-dashboard: build/toolchain/bin/kubectl$(EXE_EXTENSION)
 	$(KUBECTL) port-forward --namespace kube-system $(shell $(KUBECTL) get pod --namespace kube-system --selector="app=kubernetes-dashboard" --output jsonpath='{.items[0].metadata.name}') $(DASHBOARD_PORT):9092 $(PORT_FORWARD_ADDRESS_FLAG)
@@ -974,7 +960,7 @@ proxy-demo: build/toolchain/bin/kubectl$(EXE_EXTENSION)
 
 # Run `make proxy` instead to run everything at the same time.
 # If you run this directly it will just run each proxy sequentially.
-proxy-all: proxy-frontend proxy-backend proxy-query proxy-grafana proxy-prometheus proxy-jaeger proxy-synchronizer proxy-ui proxy-dashboard proxy-demo
+proxy-all: proxy-frontend proxy-backend proxy-query proxy-grafana proxy-prometheus proxy-synchronizer proxy-ui proxy-dashboard proxy-demo
 
 proxy:
 	# This is an exception case where we'll call recursive make.
@@ -983,6 +969,7 @@ proxy:
 
 update-deps:
 	$(GO) mod tidy
+	$(MAKE) tutorial-deps
 
 third_party/: third_party/google/api third_party/protoc-gen-openapiv2/options third_party/swaggerui/
 
@@ -1018,9 +1005,25 @@ third_party/swaggerui/:
 	$(SED_REPLACE) 's|0.0.0-dev|$(BASE_VERSION)|g' $(REPOSITORY_ROOT)/third_party/swaggerui/config.json
 	rm -rf $(TOOLCHAIN_DIR)/swaggerui-temp
 
-sync-deps:
+
+clean-deps:
 	$(GO) clean -modcache
-	$(GO) mod download
+
+sync-deps: clean-deps
+	$(GO) mod tidy
+	$(GO) mod download -x
+
+define tutorial_folder
+	$(if $(wildcard $(1)/go.mod), \
+		cd $(1) && \
+		$(GO) mod tidy
+    )
+	$(foreach dir, $(wildcard $(1)/*/.), $(call tutorial_folder, $(dir)))
+endef
+
+tutorial-deps: 
+	$(call tutorial_folder,./tutorials)
+
 
 # Prevents users from running with sudo.
 # There's an exception for Google Cloud Build because it runs as root.
