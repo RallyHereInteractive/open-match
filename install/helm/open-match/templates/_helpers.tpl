@@ -116,10 +116,10 @@ resources:
 {{- end -}}
 
 {{- define "openmatch.volumes.withredis" -}}
-{{- if .Values.redis.auth.enabled }}
+{{- if .Values.redis.auth.enabled	 }}
 - name: redis-password
   secret:
-    secretName: {{ include "call-nested" (list . "redis" "redis.fullname") }}
+    secretName: {{ include "call-nested" (list . "redis" "common.names.fullname") }}
 {{- end -}}
 {{- end -}}
 
@@ -157,14 +157,44 @@ readinessProbe:
   failureThreshold: 2
 {{- end -}}
 
-{{- define "openmatch.HorizontalPodAutoscaler.spec.common" -}}
-minReplicas: {{ .Values.global.kubernetes.horizontalPodAutoScaler.minReplicas }}
-maxReplicas: {{ .Values.global.kubernetes.horizontalPodAutoScaler.maxReplicas }}
-targetCPUUtilizationPercentage: {{ .Values.global.kubernetes.horizontalPodAutoScaler.targetCPUUtilizationPercentage }}
+{{- define "openmatch.HorizontalPodAutoscaler.frontend.spec.common" -}}
+minReplicas: {{ .Values.global.kubernetes.horizontalPodAutoScaler.frontend.minReplicas }}
+maxReplicas: {{ .Values.global.kubernetes.horizontalPodAutoScaler.frontend.maxReplicas }}
+targetCPUUtilizationPercentage: {{ .Values.global.kubernetes.horizontalPodAutoScaler.frontend.targetCPUUtilizationPercentage }}
+{{- end -}}
+
+{{- define "openmatch.HorizontalPodAutoscaler.backend.spec.common" -}}
+minReplicas: {{ .Values.global.kubernetes.horizontalPodAutoScaler.backend.minReplicas }}
+maxReplicas: {{ .Values.global.kubernetes.horizontalPodAutoScaler.backend.maxReplicas }}
+targetCPUUtilizationPercentage: {{ .Values.global.kubernetes.horizontalPodAutoScaler.backend.targetCPUUtilizationPercentage }}
+{{- end -}}
+
+{{- define "openmatch.HorizontalPodAutoscaler.query.spec.common" -}}
+minReplicas: {{ .Values.global.kubernetes.horizontalPodAutoScaler.query.minReplicas }}
+maxReplicas: {{ .Values.global.kubernetes.horizontalPodAutoScaler.query.maxReplicas }}
+targetCPUUtilizationPercentage: {{ .Values.global.kubernetes.horizontalPodAutoScaler.query.targetCPUUtilizationPercentage }}
+{{- end -}}
+
+{{- define "openmatch.HorizontalPodAutoscaler.evaluator.spec.common" -}}
+minReplicas: {{ .Values.global.kubernetes.horizontalPodAutoScaler.evaluator.minReplicas }}
+maxReplicas: {{ .Values.global.kubernetes.horizontalPodAutoScaler.evaluator.maxReplicas }}
+targetCPUUtilizationPercentage: {{ .Values.global.kubernetes.horizontalPodAutoScaler.evaluator.targetCPUUtilizationPercentage }}
+{{- end -}}
+
+{{- define "openmatch.HorizontalPodAutoscaler.matchfunction.spec.common" -}}
+minReplicas: {{ .Values.global.kubernetes.horizontalPodAutoScaler.matchfunction.minReplicas }}
+maxReplicas: {{ .Values.global.kubernetes.horizontalPodAutoScaler.matchfunction.maxReplicas }}
+targetCPUUtilizationPercentage: {{ .Values.global.kubernetes.horizontalPodAutoScaler.matchfunction.targetCPUUtilizationPercentage }}
 {{- end -}}
 
 {{- define "openmatch.serviceAccount.name" -}}
 {{- .Values.global.kubernetes.serviceAccount | default (printf "%s-unprivileged-service" (include "openmatch.fullname" . ) ) -}}
+{{- end -}}
+
+{{- define "openmatch.serviceAccountAnnotations" -}}
+{{- if .Values.global.kubernetes.serviceAccountAnnotations -}}
+{{- toYaml (.Values.global.kubernetes.serviceAccountAnnotations) | nindent 4 -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "openmatch.swaggerui.hostName" -}}
@@ -199,25 +229,9 @@ targetCPUUtilizationPercentage: {{ .Values.global.kubernetes.horizontalPodAutoSc
 {{- printf "%s-configmap-override" (include "openmatch.fullname" . ) -}}
 {{- end -}}
 
-{{- define "openmatch.jaeger.agent" -}}
-{{- if index .Values "open-match-telemetry" "enabled" -}}
-{{- if index .Values "open-match-telemetry" "jaeger" "enabled" -}}
-{{ include "call-nested" (list . "open-match-telemetry.jaeger" "jaeger.agent.name") }}:6831
-{{- end -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "openmatch.jaeger.collector" -}}
-{{- if index .Values "open-match-telemetry" "enabled" -}}
-{{- if index .Values "open-match-telemetry" "jaeger" "enabled" -}}
-http://{{ include "call-nested" (list . "open-match-telemetry.jaeger" "jaeger.collector.name") }}:14268/api/traces
-{{- end -}}
-{{- end -}}
-{{- end -}}
-
 {{/*
 Call templates from sub-charts in a synthesized context, workaround for https://github.com/helm/helm/issues/3920
-Mainly useful for things like `{{ include "call-nested" (list . "redis" "redis.fullname") }}`
+Mainly useful for things like `{{ include "call-nested" (list . "redis" "common.names.fullname") }}`
 https://github.com/helm/helm/issues/4535#issuecomment-416022809
 https://github.com/helm/helm/issues/4535#issuecomment-477778391
 */}}
