@@ -280,7 +280,8 @@ global:
   # Use this field if you need to override the image registry and image tag for all services defined in this chart
   image:
     registry: gcr.io/open-match-public-images
-    tag: 0.0.0-dev
+    #[RH-CHANGE] bturk default to 1.8.0 which was latest as of 2023-10-04
+    tag: 1.8.0
     pullPolicy: Always
 
   # Expose the telemetry configurations to all subcharts because prometheus, for example,
