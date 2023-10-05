@@ -13,12 +13,12 @@
 # limitations under the License.
 
 apiVersion: v2
-appVersion: "1.1.0-hirez4"
-version: 1.1.0-hirez4
+appVersion: "1.8.0-rallyhere1"
+version: 1.8.0-rallyhere1
 name: open-match
 dependencies:
   - name: redis
-    version: 17.11.7
+    version: 17.15.4
     repository: oci://registry-1.docker.io/bitnamicharts
     condition: open-match-core.redis.enabled
   - name: open-match-telemetry

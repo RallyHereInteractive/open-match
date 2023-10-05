@@ -20,11 +20,12 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-	"github.com/golang/protobuf/proto"
 	"github.com/gomodule/redigo/redis"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"open-match.dev/open-match/internal/config"
 	"open-match.dev/open-match/pkg/pb"
 )
 
@@ -35,6 +36,7 @@ const (
 
 // CreateTicket creates a new Ticket in the state storage. If the id already exists, it will be overwritten.
 func (rb *redisBackend) CreateTicket(ctx context.Context, ticket *pb.Ticket) error {
+
 	redisConn, err := rb.redisPool.GetContext(ctx)
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "CreateTicket, id: %s, failed to connect to redis: %v", ticket.GetId(), err)
@@ -45,6 +47,10 @@ func (rb *redisBackend) CreateTicket(ctx context.Context, ticket *pb.Ticket) err
 	if err != nil {
 		err = errors.Wrapf(err, "failed to marshal the ticket proto, id: %s", ticket.GetId())
 		return status.Errorf(codes.Internal, "%v", err)
+	}
+
+	if value == nil {
+		return status.Errorf(codes.Internal, "failed to marshal the ticket proto, id: %s: proto: Marshal called with nil", ticket.GetId())
 	}
 
 	_, err = redisConn.Do("SET", ticket.GetId(), value)
@@ -154,7 +160,7 @@ func (rb *redisBackend) GetIndexedIDSet(ctx context.Context) (map[string]struct{
 	}
 	defer handleConnectionClose(&redisConn)
 
-	ttl := rb.cfg.GetDuration("pendingReleaseTimeout")
+	ttl := getBackfillReleaseTimeout(rb.cfg)
 	curTime := time.Now()
 	endTimeInt := curTime.Add(time.Hour).UnixNano()
 	startTimeInt := curTime.Add(-ttl).UnixNano()
@@ -255,6 +261,10 @@ func (rb *redisBackend) UpdateAssignments(ctx context.Context, req *pb.AssignTic
 		}
 	}
 
+	if len(idsI) == 0 {
+		return nil, nil, status.Error(codes.InvalidArgument, "AssignmentGroupTicketIds is empty")
+	}
+
 	ticketBytes, err := redis.ByteSlices(redisConn.Do("MGET", idsI...))
 	if err != nil {
 		return nil, nil, err
@@ -278,7 +288,7 @@ func (rb *redisBackend) UpdateAssignments(ctx context.Context, req *pb.AssignTic
 			tickets = append(tickets, t)
 		}
 	}
-	assignmentTimeout := rb.cfg.GetDuration("assignedDeleteTimeout") / time.Millisecond
+	assignmentTimeout := getAssignedDeleteTimeout(rb.cfg) / time.Millisecond
 	err = redisConn.Send("MULTI")
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "error starting redis multi")
@@ -441,4 +451,19 @@ func (rb *redisBackend) newExponentialBackoffStrategy() backoff.BackOff {
 	backoffStrat.MaxInterval = rb.cfg.GetDuration("backoff.maxInterval")
 	backoffStrat.MaxElapsedTime = rb.cfg.GetDuration("backoff.maxElapsedTime")
 	return backoff.BackOff(backoffStrat)
+}
+
+func getAssignedDeleteTimeout(cfg config.View) time.Duration {
+	const (
+		name = "assignedDeleteTimeout"
+		// Default timeout to delete tickets after assignment. This value
+		// will be used if assignedDeleteTimeout is not configured.
+		defaultAssignedDeleteTimeout time.Duration = 10 * time.Minute
+	)
+
+	if !cfg.IsSet(name) {
+		return defaultAssignedDeleteTimeout
+	}
+
+	return cfg.GetDuration(name)
 }
