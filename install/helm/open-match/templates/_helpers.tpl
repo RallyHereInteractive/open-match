@@ -64,7 +64,9 @@ prometheus.io/path: {{ .prometheus.endpoint }}
 Render global podAnnotations
 */}}
 {{- define "openmatch.podAnnotations"}}
+{{- if .Values.global.kubernetes.annotations }}
 {{- toYaml .Values.global.kubernetes.annotations }}
+{{- end -}}
 {{- end -}}
 
 {{- define "openmatch.container.common" -}}
