@@ -23,6 +23,9 @@ metadata:
     app: {{ template "openmatch.name" . }}
     component: query
     release: {{ .Release.Name }}
+    {{- with .Values.query.serviceLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   selector:
     app: {{ template "openmatch.name" . }}
