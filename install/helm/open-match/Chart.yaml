@@ -14,12 +14,12 @@
 
 apiVersion: v2
 appVersion: "1.8.0-rallyhere2"
-version: 1.8.0-rallyhere2
+version: 1.8.0-rallyhere3
 name: open-match
 dependencies:
   - name: redis
-    version: 17.15.4
-    repository: oci://registry-1.docker.io/bitnamicharts
+    version: 23.2.1
+    repository: oci://hirez.azurecr.io/bitnamicharts
     condition: open-match-core.redis.enabled
   - name: open-match-telemetry
     version: 0.0.0-dev

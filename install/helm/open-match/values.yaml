@@ -106,6 +106,10 @@ configs:
 # Override Redis settings
 # https://github.com/bitnami/charts/tree/ba40e46ec6831e039f5bf213ab10e9748603ce6c/bitnami/redis
 redis:
+  global:
+    imageRegistry: hirez.azurecr.io
+  image:
+    tag: 8.2.2-debian-12-r0
   architecture: standalone
   auth:
     enabled: false
@@ -127,8 +131,13 @@ redis:
       requests:
         memory: 300Mi
         cpu: 0.5
+  sentinel:
+    image:
+      tag: 8.2.2-debian-12-r0
   metrics:
     enabled: true
+    image:
+      tag: 1.79.0-debian-12-r0
   sysctlImage:
     # Disable this setting in production if you are not running Redis in Linux
     enabled: true

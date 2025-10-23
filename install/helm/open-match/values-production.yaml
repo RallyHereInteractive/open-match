@@ -106,6 +106,10 @@ configs:
 # https://hub.helm.sh/charts/stable/redis
 # https://github.com/helm/charts/tree/master/stable/redis
 redis:
+  global:
+    imageRegistry: hirez.azurecr.io
+  image:
+    tag: 8.2.2-debian-12-r0
   architecture: standalone
   auth:
     enabled: false
@@ -123,8 +127,13 @@ redis:
         cpu: 6
     persistence:
       enabled: false
+  sentinel:
+    image:
+      tag: 8.2.2-debian-12-r0
   metrics:
     enabled: true
+    image:
+      tag: 1.79.0-debian-12-r0
   sysctlImage:
     # Enable this setting in production if you are running Open Match under Linux environment
     enabled: true
