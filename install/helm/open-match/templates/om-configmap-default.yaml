@@ -116,16 +116,22 @@ data:
 {{- end}}
 {{- else }}
       # BYO Redis setups
-{{- if index .Values "open-match-core" "redis" "sentinel" "enabled" }}
-      sentinelPort: {{ index .Values "open-match-core" "redis" "sentinel" "port" }}
-      sentinelMaster: {{ index .Values "open-match-core" "redis" "sentinel" "masterSet" }}
-      sentinelHostname: {{ index .Values "open-match-core" "redis" "sentinel" "hostname" }}
-      sentinelUsePassword: {{ index .Values "open-match-core" "redis" "sentinel" "usePassword" }}
+{{- if dig "redis" "sentinel" "enabled" false (index .Values "open-match-core") }}
+      sentinelPort: {{ dig "redis" "sentinel" "port" 26379 (index .Values "open-match-core") }}
+      sentinelMaster: {{ dig "redis" "sentinel" "masterSet" "mymaster" (index .Values "open-match-core") }}
+      {{- /* Required rather than defaulted: an empty sentinelHostname leaves the
+             key unset, which routes back through the direct path with no
+             hostname either — i.e. dialling ":" — and reports nothing about
+             sentinel in any log line. */}}
+      sentinelHostname: {{ required "open-match-core.redis.sentinel.hostname is required when sentinel.enabled is true" (dig "redis" "sentinel" "hostname" "" (index .Values "open-match-core")) }}
+      sentinelUsePassword: {{ dig "redis" "sentinel" "usePassword" false (index .Values "open-match-core") }}
 {{- else }}
       hostname: {{ index .Values "open-match-core" "redis" "hostname" }}
       port: {{ index .Values "open-match-core" "redis" "port" }}
-      user: {{ index .Values "open-match-core" "redis" "user" }}
 {{- end }}
+      {{- /* Outside the branch: user is read for every connection URL, the
+             sentinel-resolved master included, so it is not a direct-mode key. */}}
+      user: {{ index .Values "open-match-core" "redis" "user" }}
 {{- end }}
       usePassword: {{ .Values.redis.auth.enabled }}
       passwordPath: {{ .Values.redis.secretMountPath }}/redis-password

@@ -185,10 +185,13 @@ open-match-core:
     user:
     # Reach the BYO instance through Sentinel rather than a fixed address, so a
     # failover is resolved on connect instead of needing a config change. Open
-    # Match switches on sentinelHostname being present, so hostname/port/user
-    # above are unused when this is enabled.
+    # Match switches on sentinelHostname being present, which makes hostname and
+    # port above unused — but not user, which is applied to every connection
+    # including the sentinel-resolved master.
     sentinel:
       enabled: false
+      # Required when enabled: an empty value leaves sentinelHostname unset,
+      # which silently falls back to the direct path with no address at all.
       hostname: # Your sentinel service address
       port: 26379
       masterSet: mymaster
