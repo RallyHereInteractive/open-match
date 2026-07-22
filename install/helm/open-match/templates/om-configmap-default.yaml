@@ -116,9 +116,16 @@ data:
 {{- end}}
 {{- else }}
       # BYO Redis setups
+{{- if index .Values "open-match-core" "redis" "sentinel" "enabled" }}
+      sentinelPort: {{ index .Values "open-match-core" "redis" "sentinel" "port" }}
+      sentinelMaster: {{ index .Values "open-match-core" "redis" "sentinel" "masterSet" }}
+      sentinelHostname: {{ index .Values "open-match-core" "redis" "sentinel" "hostname" }}
+      sentinelUsePassword: {{ index .Values "open-match-core" "redis" "sentinel" "usePassword" }}
+{{- else }}
       hostname: {{ index .Values "open-match-core" "redis" "hostname" }}
       port: {{ index .Values "open-match-core" "redis" "port" }}
       user: {{ index .Values "open-match-core" "redis" "user" }}
+{{- end }}
 {{- end }}
       usePassword: {{ .Values.redis.auth.enabled }}
       passwordPath: {{ .Values.redis.secretMountPath }}/redis-password

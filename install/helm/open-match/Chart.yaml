@@ -13,8 +13,8 @@
 # limitations under the License.
 
 apiVersion: v2
-appVersion: "1.8.0-rallyhere2"
-version: 1.8.0-rallyhere2
+appVersion: "1.8.0-rallyhere3"
+version: 1.8.0-rallyhere3
 name: open-match
 dependencies:
   - name: redis
