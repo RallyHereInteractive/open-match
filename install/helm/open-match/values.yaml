@@ -183,6 +183,19 @@ open-match-core:
     hostname: # Your redis server address
     port: 6379
     user:
+    # Reach the BYO instance through Sentinel rather than a fixed address, so a
+    # failover is resolved on connect instead of needing a config change. Open
+    # Match switches on sentinelHostname being present, which makes hostname and
+    # port above unused — but not user, which is applied to every connection
+    # including the sentinel-resolved master.
+    sentinel:
+      enabled: false
+      # Required when enabled: an empty value leaves sentinelHostname unset,
+      # which silently falls back to the direct path with no address at all.
+      hostname: # Your sentinel service address
+      port: 26379
+      masterSet: mymaster
+      usePassword: false
     pool:
       maxIdle: 200
       maxActive: 0
